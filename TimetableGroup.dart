@@ -52,7 +52,9 @@ class _TimetableGroupState extends State<TimetableGroup> {
       } else {
         throw Exception('Failed to load groups: ${response.statusCode}');
       }
-    } catch (error) {}
+    } catch (error) {
+      print('Error fetching groups: $error');
+    }
   }
 
   Future<List<Map<String, dynamic>>> fetchGroupSchedule(String groupName) async {
@@ -74,6 +76,26 @@ class _TimetableGroupState extends State<TimetableGroup> {
       throw Exception('Error fetching group schedule: $error');
     }
   }
+
+  Future<void> deleteScheduleItem(String id) async {
+  print('Deleting schedule item with id: $id'); // Выводим id в консоль для отладки
+  try {
+    final config = await _loadConfig();
+    final response = await http.delete(
+      Uri.parse('${config['baseUrl']}:${config['port']}/schedule/$id'),
+    );
+    if (response.statusCode == 200) {
+      setState(() {
+        _futureGroupSchedule = fetchGroupSchedule(widget.selectedGroup);
+      });
+    } else {
+      throw Exception('Failed to delete schedule item: ${response.statusCode}');
+    }
+  } catch (error) {
+    print('Error deleting schedule item: $error');
+  }
+}
+
 
   void _onFacultyPressed() {
   }
@@ -134,6 +156,7 @@ class _TimetableGroupState extends State<TimetableGroup> {
       ),
     );
   }
+
  Widget _buildGroupColumns() {
   return SingleChildScrollView(
     scrollDirection: Axis.horizontal,
@@ -161,7 +184,6 @@ class _TimetableGroupState extends State<TimetableGroup> {
                   } else {
                     final List<Map<String, dynamic>> schedule = snapshot.data ?? [];
 
-                    // Группируем расписание по day_of_the_week
                     final Map<String, List<Map<String, dynamic>>> groupedByDay = {};
                     for (var item in schedule) {
                       String key = '${item['day_of_the_week']}';
@@ -198,7 +220,6 @@ class _TimetableGroupState extends State<TimetableGroup> {
                                 String dayOfWeek = dayEntry.key;
                                 List<Map<String, dynamic>> dayItems = dayEntry.value;
 
-                                // Группируем расписание по pair_name внутри каждого дня
                                 final Map<String, List<Map<String, dynamic>>> groupedByPair = {};
                                 for (var item in dayItems) {
                                   String key = '${item['pair_name']}';
@@ -296,22 +317,31 @@ class _TimetableGroupState extends State<TimetableGroup> {
 
 Widget _buildScheduleItem(Map<String, dynamic> item, TextAlign textAlign) {
   return Column(
-    crossAxisAlignment: textAlign == TextAlign.center ? CrossAxisAlignment.center : CrossAxisAlignment.start,
+    crossAxisAlignment: textAlign == TextAlign.center ? CrossAxisAlignment.center :
+textAlign == TextAlign.end ? CrossAxisAlignment.end : CrossAxisAlignment.start,
     children: [
-      RichText(
-        textAlign: textAlign,
-        text: TextSpan(
-          children: [
-            TextSpan(
-              text: item['discipline'].split(' ').take(item['discipline'].split(' ').length - 1).join(' '),
-              style: TextStyle(fontSize: 20.0, color: Colors.black),
+      Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Expanded(
+            child: RichText(
+              textAlign: textAlign,
+              text: TextSpan(
+                children: [
+                  TextSpan(
+                    text: item['discipline'].split(' ').take(item['discipline'].split(' ').length - 1).join(' '),
+                    style: TextStyle(fontSize: 20.0, color: Colors.black),
+                  ),
+                  TextSpan(
+                    text: ' ${item['discipline'].split(' ').last}',
+                    style: TextStyle(fontSize: 20.0, fontWeight: FontWeight.bold, color: Colors.black),
+                  ),
+                ],
+              ),
             ),
-            TextSpan(
-              text: ' ${item['discipline'].split(' ').last}',
-              style: TextStyle(fontSize: 20.0, fontWeight: FontWeight.bold, color: Colors.black),
-            ),
-          ],
-        ),
+          ),
+          
+        ],
       ),
       SizedBox(height: 10.0),
       Text(
@@ -334,7 +364,13 @@ Widget _buildScheduleItem(Map<String, dynamic> item, TextAlign textAlign) {
         overflow: TextOverflow.ellipsis,
         maxLines: 1,
         textAlign: textAlign,
-      ),
+      ),IconButton(
+            icon: Icon(Icons.delete, color: Color.fromARGB(255, 140, 11, 2)),
+            onPressed: () async {
+              await deleteScheduleItem(item['id'].toString());
+            },
+            tooltip: 'Удалить запись:${item['discipline']}',
+          ),
     ],
   );
 }
