@@ -58,8 +58,7 @@ class _TimetableGroupState extends State<TimetableGroup> {
   Future<List<Map<String, dynamic>>> fetchGroupSchedule(String groupName) async {
     try {
       final config = await _loadConfig();
-      final response =
-      await http.get(Uri.parse('${config['baseUrl']}:${config['port']}/schedule/group?group_name=$groupName'));
+      final response = await http.get(Uri.parse('${config['baseUrl']}:${config['port']}/schedule/group?group_name=$groupName'));
       if (response.statusCode == 200) {
         final List<dynamic> data = jsonDecode(response.body);
         if (data.isNotEmpty) {
@@ -92,6 +91,27 @@ class _TimetableGroupState extends State<TimetableGroup> {
       print('Error deleting schedule item: $error');
     }
   }
+
+  Future<void> updateScheduleItem(String id, Map<String, dynamic> updatedItem) async {
+  try {
+    final config = await _loadConfig();
+    final response = await http.put(
+      Uri.parse('${config['baseUrl']}:${config['port']}/schedule/update/$id'),
+      headers: {'Content-Type': 'application/json; charset=UTF-8'},
+      body: jsonEncode(updatedItem),
+    );
+    if (response.statusCode == 200) {
+      setState(() {
+        _futureGroupSchedule = fetchGroupSchedule(widget.selectedGroup);
+      });
+    } else {
+      throw Exception('Failed to update schedule item: ${response.statusCode}');
+    }
+  } catch (error) {
+    print('Error updating schedule item: $error');
+  }
+}
+
 
   void _onRefreshPressed() {
     setState(() {
@@ -150,22 +170,20 @@ class _TimetableGroupState extends State<TimetableGroup> {
   }
 
   Widget _buildGroupColumns() {
-  final groupListViewScrollController = ScrollController();
+    final groupListViewScrollController = ScrollController();
 
-  return Scrollbar(
-    interactive: true, // Сделать полосу прокрутки всегда интерактивной
-    controller: groupListViewScrollController,
-    thickness: 15,
-    radius: Radius.circular(40),
-    child: ListView(
-      scrollDirection: Axis.horizontal,
+    return Scrollbar(
+      interactive: true,
       controller: groupListViewScrollController,
-      children: [
-        Row(
-          children: [
-            Scrollbar(
-              interactive: true, // Сделать полосу прокрутки всегда интерактивной
-              child: ListView.builder(
+      thickness: 15,
+      radius: const Radius.circular(40),
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        controller: groupListViewScrollController,
+        children: [
+          Row(
+            children: [
+              ListView.builder(
                 scrollDirection: Axis.horizontal,
                 shrinkWrap: true,
                 itemCount: _groups.length,
@@ -193,198 +211,274 @@ class _TimetableGroupState extends State<TimetableGroup> {
                           }
                         }
 
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                        child: SingleChildScrollView(
-                          scrollDirection: Axis.vertical,
-                          child: Container(
-                            padding: const EdgeInsets.all(12.0),
-                            decoration: BoxDecoration(
-                              color: Colors.grey[200],
-                              borderRadius: BorderRadius.circular(8.0),
-                            ),
-                            width: _calculateGroupWidth(groupName),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                Text(
-                                  groupName,
-                                  style: const TextStyle(fontSize: 20.0, fontWeight: FontWeight.bold),
-                                  textAlign: TextAlign.center,
-                                ),
-                                const SizedBox(height: 8.0),
-                                ...groupedByDay.entries.map((dayEntry) {
-                                  String dayOfWeek = dayEntry.key;
-                                  List<Map<String, dynamic>> dayItems = dayEntry.value;
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                          child: SingleChildScrollView(
+                            scrollDirection: Axis.vertical,
+                            child: Container(
+                              padding: const EdgeInsets.all(12.0),
+                              decoration: BoxDecoration(
+                                color: Colors.grey[200],
+                                borderRadius: BorderRadius.circular(8.0),
+                              ),
+                              width: _calculateGroupWidth(groupName),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  Text(
+                                    groupName,
+                                    style: const TextStyle(fontSize: 20.0, fontWeight: FontWeight.bold),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                  const SizedBox(height: 8.0),
+                                  ...groupedByDay.entries.map((dayEntry) {
+                                    String dayOfWeek = dayEntry.key;
+                                    List<Map<String, dynamic>> dayItems = dayEntry.value;
 
-                                  final Map<String, List<Map<String, dynamic>>> groupedByPair = {};
-                                  for (var item in dayItems) {
-                                    String key = '${item['pair_name']}';
-                                    if (groupedByPair.containsKey(key)) {
-                                      groupedByPair[key]!.add(item);
-                                    } else {
-                                      groupedByPair[key] = [item];
+                                    final Map<String, List<Map<String, dynamic>>> groupedByPair = {};
+                                    for (var item in dayItems) {
+                                      String key = '${item['pair_name']}';
+                                      if (groupedByPair.containsKey(key)) {
+                                        groupedByPair[key]!.add(item);
+                                      } else {
+                                        groupedByPair[key] = [item];
+                                      }
                                     }
-                                  }
 
-                                  return Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        dayOfWeek,
-                                        style: const TextStyle(fontSize: 25.0, fontWeight: FontWeight.bold),
-                                      ),
-                                      ...groupedByPair.entries.map((pairEntry) {
-                                        String pairName = pairEntry.key;
-                                        List<Map<String, dynamic>> items = pairEntry.value;
+                                    return Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          dayOfWeek,
+                                          style: const TextStyle(fontSize: 25.0, fontWeight: FontWeight.bold),
+                                        ),
+                                        ...groupedByPair.entries.map((pairEntry) {
+                                          String pairName = pairEntry.key;
+                                          List<Map<String, dynamic>> items = pairEntry.value;
 
-                                        return Padding(
-                                          padding: const EdgeInsets.all(8.0),
-                                          child: Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                            children: [
-                                              Text(
-                                                '$pairName пара',
-                                                style: const TextStyle(fontSize: 20.0),
-                                              ),
-                                              const SizedBox(height: 12.0),
-                                              Container(
-                                                padding: const EdgeInsets.all(8.0),
-                                                decoration: BoxDecoration(
-                                                  color: Colors.white,
-                                                  borderRadius: BorderRadius.circular(8.0),
+                                          return Padding(
+                                            padding: const EdgeInsets.all(8.0),
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  '$pairName пара',
+                                                  style: const TextStyle(fontSize: 20.0),
                                                 ),
-                                                child: items.any((item) => item['subgroup'] != 'нет разделения' && item['subgroup'] != 'не определена')
-                                                    ? Row(
-                                                  children: [
-                                                    if (items.any((item) => item['subgroup'] == '1'))
-                                                      Expanded(
-                                                        flex: 1,
-                                                        child: Column(
-                                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                                          children: items
-                                                              .where((item) => item['subgroup'] == '1')
-                                                              .map((item) => _buildScheduleItem(item, TextAlign.start))
-                                                              .toList(),
+                                                const SizedBox(height: 12.0),
+                                                Container(
+                                                  padding: const EdgeInsets.all(8.0),
+                                                  decoration: BoxDecoration(
+                                                    color: Colors.white,
+                                                    borderRadius: BorderRadius.circular(8.0),
+                                                  ),
+                                                  child: items.any((item) => item['subgroup'] != 'нет разделения' && item['subgroup'] != 'не определена')
+                                                      ? Row(
+                                                    children: [
+                                                      if (items.any((item) => item['subgroup'] == '1'))
+                                                        Expanded(
+                                                          flex: 1,
+                                                          child: Column(
+                                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                                            children: items
+                                                                .where((item) => item['subgroup'] == '1')
+                                                                .map((item) => _buildScheduleItem(item, TextAlign.start))
+                                                                .toList(),
+                                                          ),
                                                         ),
-                                                      ),
-                                                    if (items.any((item) => item['subgroup'] == '2'))
-                                                      Expanded(
-                                                        flex: 1,
-                                                        child: Column(
-                                                          crossAxisAlignment: CrossAxisAlignment.end,
-                                                          children: items
-                                                              .where((item) => item['subgroup'] == '2')
-                                                              .map((item) => _buildScheduleItem(item, TextAlign.end))
-                                                              .toList(),
+                                                      if (items.any((item) => item['subgroup'] == '2'))
+                                                        Expanded(
+                                                          flex: 1,
+                                                          child: Column(
+                                                            crossAxisAlignment: CrossAxisAlignment.end,
+                                                            children: items
+                                                                .where((item) => item['subgroup'] == '2')
+                                                                .map((item) => _buildScheduleItem(item, TextAlign.end))
+                                                                .toList(),
+                                                          ),
                                                         ),
-                                                      ),
-                                                  ],
-                                                )
-                                                    : Column(
-                                                  crossAxisAlignment: CrossAxisAlignment.center,
-                                                  children: items.map((item) => SizedBox(
-                                                    width: 900,
-                                                    child: _buildScheduleItem(item, TextAlign.center),
-                                                  )).toList(),
+                                                    ],
+                                                  )
+                                                      : Column(
+                                                    crossAxisAlignment: CrossAxisAlignment.center,
+                                                    children: items.map((item) => SizedBox(
+                                                      width: 900,
+                                                      child: _buildScheduleItem(item, TextAlign.center),
+                                                    )).toList(),
+                                                  ),
                                                 ),
-                                              ),
-                                            ],
-                                          ),
-                                        );
-                                      }),
-                                    ],
-                                  );
-                                }),
-                              ],
+                                              ],
+                                            ),
+                                          );
+                                        }),
+                                      ],
+                                    );
+                                  }),
+                                ],
+                              ),
                             ),
                           ),
-                        ),
-                      );
-                    }
-                  },
-                );
-              },
-            ),
+                        );
+                      }
+                    },
+                  );
+                },
+              ),
+            ],
           ),
         ],
       ),
-      ],
-    ),
     );
   }
 
   Widget _buildScheduleItem(Map<String, dynamic> item, TextAlign textAlign) {
-    return Column(
-      crossAxisAlignment: textAlign == TextAlign.center ? CrossAxisAlignment.center :
-      textAlign == TextAlign.end ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Expanded(
-              child: RichText(
-                textAlign: textAlign,
-                text: TextSpan(
-                  children: [
-                    WidgetSpan(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 0.0),
-                        child: IconButton(
-                          icon: const Icon(Icons.delete, color: Color.fromARGB(128, 12, 12, 12)),
-                          onPressed: () async {
-                            await deleteScheduleItem(item['id'].toString());
-                          },
-                          tooltip: 'Удалить запись:${item['discipline']}',
-                          iconSize: 20.0,
-                          constraints: const BoxConstraints.tightFor(
-                            width: 28.0,
-                            height: 28.0,
-                          ),
+  TextEditingController disciplineController = TextEditingController(text: item['discipline']);
+  TextEditingController weekController = TextEditingController(text: item['week']);
+  TextEditingController classroomController = TextEditingController(text: item['classroom']);
+  TextEditingController teacherNameController = TextEditingController(text: item['teacher_name']);
+
+  return Column(
+    crossAxisAlignment: textAlign == TextAlign.center ? CrossAxisAlignment.center :
+    textAlign == TextAlign.end ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+    children: [
+      Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Expanded(
+            child: RichText(
+              textAlign: textAlign,
+              text: TextSpan(
+                children: [
+                  WidgetSpan(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 0.0),
+                      child: IconButton(
+                        icon: const Icon(Icons.delete, color: Color.fromARGB(128, 12, 12, 12)),
+                        onPressed: () async {
+                          await deleteScheduleItem(item['id'].toString());
+                        },
+                        tooltip: 'Удалить запись:${item['discipline']}',
+                        iconSize: 20.0,
+                        constraints: const BoxConstraints.tightFor(
+                          width: 28.0,
+                          height: 28.0,
                         ),
                       ),
                     ),
-                    TextSpan(
-                      text: '${item['discipline'].split(' ').take(item['discipline'].split(' ').length - 1).join(' ')}',
-                      style: const TextStyle(fontSize: 20.0, color: Colors.black),
+                  ),
+                  WidgetSpan(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 0.0),
+                      child: IconButton(
+                        icon: const Icon(Icons.edit, color: Color.fromARGB(128, 12, 12, 12)),
+                        onPressed: () {
+                          showDialog(
+                            context: context,
+                            builder: (BuildContext context) {
+                              return AlertDialog(
+                                title: const Text('Редактировать расписание'),
+                                content: SingleChildScrollView(
+                                  child: Column(
+                                    children: [
+                                      TextField(
+                                        controller: disciplineController,
+                                        decoration: const InputDecoration(
+                                          labelText: 'Дисциплина',
+                                        ),
+                                      ),
+                                      TextField(
+                                        controller: weekController,
+                                        decoration: const InputDecoration(
+                                          labelText: 'Неделя',
+                                        ),
+                                      ),
+                                      TextField(
+                                        controller: classroomController,
+                                        decoration: const InputDecoration(
+                                          labelText: 'Аудитория',
+                                        ),
+                                      ),
+                                      TextField(
+                                        controller: teacherNameController,
+                                        decoration: const InputDecoration(
+                                          labelText: 'Преподаватель',
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () {
+                                      Navigator.of(context).pop();
+                                    },
+                                    child: const Text('Отмена'),
+                                  ),
+                                  ElevatedButton(
+                                    onPressed: () async {
+                                      await updateScheduleItem(item['id'].toString(), {
+                                        'discipline': disciplineController.text,
+                                        'week': weekController.text,
+                                        'classroom': classroomController.text,
+                                        'teacher_name': teacherNameController.text,
+                                      });
+                                      Navigator.of(context).pop();
+                                    },
+                                    child: const Text('Сохранить'),
+                                  ),
+                                ],
+                              );
+                            },
+                          );
+                        },
+                        tooltip: 'Редактирование записи:${item['discipline']}',
+                        iconSize: 20.0,
+                        constraints: const BoxConstraints.tightFor(
+                          width: 28.0,
+                          height: 28.0,
+                        ),
+                      ),
                     ),
-                    TextSpan(
-                      text: ' ${item['discipline'].split(' ').last}',
-                      style: const TextStyle(fontSize: 20.0, fontWeight: FontWeight.bold, color: Colors.black),
-                    ),
-                  ],
-                ),
+                  ),
+                  TextSpan(
+                    text: '${item['discipline'].split(' ').take(item['discipline'].split(' ').length - 1).join(' ')}',
+                    style: const TextStyle(fontSize: 20.0, color: Colors.black),
+                  ),
+                  TextSpan(
+                    text: ' ${item['discipline'].split(' ').last}',
+                    style: const TextStyle(fontSize: 20.0, fontWeight: FontWeight.bold, color: Colors.black),
+                  ),
+                ],
               ),
             ),
-          ],
-        ),
-        const SizedBox(height: 10.0),
-        Text(
-          'Неделя: ${item['week']}',
-          style: const TextStyle(fontSize: 16.0),
-          overflow: TextOverflow.ellipsis,
-          maxLines: 1,
-          textAlign: textAlign,
-        ),
-        Text(
-          'Аудитория: ${item['classroom']}',
-          style: const TextStyle(fontSize: 16.0),
-          overflow: TextOverflow.ellipsis,
-          maxLines: 1,
-          textAlign: textAlign,
-        ),
-        Text(
-          'Преподаватель: ${item['teacher_name']}',
-          style: const TextStyle(fontSize: 16.0),
-          overflow: TextOverflow.ellipsis,
-          maxLines: 1,
-          textAlign: textAlign,
-        ),
-      ],
-    );
-  }
-
-
+          ),
+        ],
+      ),
+      const SizedBox(height: 10.0),
+      Text(
+        'Неделя: ${item['week']}',
+        style: const TextStyle(fontSize: 16.0),
+        overflow: TextOverflow.ellipsis,
+        maxLines: 1,
+        textAlign: textAlign,
+      ),
+      Text(
+        'Аудитория: ${item['classroom']}',
+        style: const TextStyle(fontSize: 16.0),
+        overflow: TextOverflow.ellipsis,
+        maxLines: 1,
+        textAlign: textAlign,
+      ),
+      Text(
+        'Преподаватель: ${item['teacher_name']}',
+        style: const TextStyle(fontSize: 16.0),
+        overflow: TextOverflow.ellipsis,
+        maxLines: 1,
+        textAlign: textAlign,
+      ),
+    ],
+  );
+}
 
   double _calculateGroupWidth(String groupName) {
     final textWidth = TextPainter(
