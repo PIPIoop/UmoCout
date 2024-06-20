@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:flutter/material.dart';
+
 
 class TimetableGroup extends StatefulWidget {
   final String selectedGroup;
@@ -15,6 +17,9 @@ class TimetableGroup extends StatefulWidget {
 class _TimetableGroupState extends State<TimetableGroup> {
   late Future<List<Map<String, dynamic>>> _futureGroupSchedule;
   List<String> _groups = [];
+  List<String> _teachers = [];
+  List<String> _disciplines = [];
+  List<String> _classrooms = [];
 
   final ScrollController _scrollController = ScrollController();
 
@@ -28,11 +33,41 @@ class _TimetableGroupState extends State<TimetableGroup> {
   void initState() {
     super.initState();
     _futureGroupSchedule = fetchGroupSchedule(widget.selectedGroup);
+    fetchTeachers();
+    fetchDisciplines();
+    fetchClassrooms();
   }
 
   Future<Map<String, dynamic>> _loadConfig() async {
     final String jsonString = await DefaultAssetBundle.of(context).loadString('assets/config.json');
     return jsonDecode(jsonString);
+  }
+
+  Future<void> fetchTeachers() async {
+    try {
+      final config = await _loadConfig();
+      final response = await http.get(Uri.parse('${config['baseUrl']}:${config['port']}/professor'));
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> data = jsonDecode(response.body);
+        if (data.containsKey('professors')) {
+          final List<dynamic> professors = data['professors'];
+          List<String> newTeachers = [];
+          for (var professor in professors) {
+            String fullName = '${professor['last_name']} ${professor['initials']}';
+            newTeachers.add(fullName);
+          }
+          setState(() {
+            _teachers = newTeachers;
+          });
+        } else {
+          throw Exception('Invalid data format: Missing "professors" key');
+        }
+      } else {
+        throw Exception('Failed to load data: ${response.statusCode}');
+      }
+    } catch (error) {
+      print('Error: $error');
+    }
   }
 
   Future<void> fetchGroups(String directionId) async {
@@ -73,6 +108,52 @@ class _TimetableGroupState extends State<TimetableGroup> {
       throw Exception('Error fetching group schedule: $error');
     }
   }
+  Future<void> fetchClassrooms() async {
+    try {
+      final config = await _loadConfig();
+      final response = await http.get(Uri.parse('${config['baseUrl']}:${config['port']}/classroom'));
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> data = jsonDecode(response.body);
+        if (data.containsKey('classrooms')) {
+          final List<dynamic> classrooms = data['classrooms'];
+          _classrooms = classrooms.map((item) => item['initials'] as String).toList();
+          setState(() {
+            _classrooms = _classrooms.toSet().toList();
+          });
+        } else {
+          throw Exception('Invalid data format: Missing "classrooms" key');
+        }
+      } else {
+        throw Exception('Failed to load data: ${response.statusCode}');
+      }
+    } catch (error) {
+      print('Error: $error');
+    }
+  }
+
+  Future<void> fetchDisciplines() async {
+    try {
+      final config = await _loadConfig();
+      final response = await http.get(Uri.parse('${config['baseUrl']}:${config['port']}/discipline'));
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> data = jsonDecode(response.body);
+        if (data.containsKey('disciplines')) {
+          final List<dynamic> disciplines = data['disciplines'];
+          _disciplines = disciplines.map((item) => item['discipline_name'] as String).toList();
+          _disciplines = _disciplines.toSet().toList();
+          setState(() {
+            _disciplines = _disciplines;
+          });
+        } else {
+          throw Exception('Invalid data format: Missing "disciplines" key');
+        }
+      } else {
+        throw Exception('Failed to load data: ${response.statusCode}');
+      }
+    } catch (error) {
+      print('Error: $error');
+    }
+  }
 
   Future<void> deleteScheduleItem(String id) async {
     try {
@@ -93,25 +174,24 @@ class _TimetableGroupState extends State<TimetableGroup> {
   }
 
   Future<void> updateScheduleItem(String id, Map<String, dynamic> updatedItem) async {
-  try {
-    final config = await _loadConfig();
-    final response = await http.put(
-      Uri.parse('${config['baseUrl']}:${config['port']}/schedule/update/$id'),
-      headers: {'Content-Type': 'application/json; charset=UTF-8'},
-      body: jsonEncode(updatedItem),
-    );
-    if (response.statusCode == 200) {
-      setState(() {
-        _futureGroupSchedule = fetchGroupSchedule(widget.selectedGroup);
-      });
-    } else {
-      throw Exception('Failed to update schedule item: ${response.statusCode}');
+    try {
+      final config = await _loadConfig();
+      final response = await http.put(
+        Uri.parse('${config['baseUrl']}:${config['port']}/schedule/update/$id'),
+        headers: {'Content-Type': 'application/json; charset=UTF-8'},
+        body: jsonEncode(updatedItem),
+      );
+      if (response.statusCode == 200) {
+        setState(() {
+          _futureGroupSchedule = fetchGroupSchedule(widget.selectedGroup);
+        });
+      } else {
+        throw Exception('Failed to update schedule item: ${response.statusCode}');
+      }
+    } catch (error) {
+      print('Error updating schedule item: $error');
     }
-  } catch (error) {
-    print('Error updating schedule item: $error');
   }
-}
-
 
   void _onRefreshPressed() {
     setState(() {
@@ -274,38 +354,38 @@ class _TimetableGroupState extends State<TimetableGroup> {
                                                   ),
                                                   child: items.any((item) => item['subgroup'] != 'нет разделения' && item['subgroup'] != 'не определена')
                                                       ? Row(
-                                                    children: [
-                                                      if (items.any((item) => item['subgroup'] == '1'))
-                                                        Expanded(
-                                                          flex: 1,
-                                                          child: Column(
-                                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                                            children: items
-                                                                .where((item) => item['subgroup'] == '1')
-                                                                .map((item) => _buildScheduleItem(item, TextAlign.start))
-                                                                .toList(),
-                                                          ),
-                                                        ),
-                                                      if (items.any((item) => item['subgroup'] == '2'))
-                                                        Expanded(
-                                                          flex: 1,
-                                                          child: Column(
-                                                            crossAxisAlignment: CrossAxisAlignment.end,
-                                                            children: items
-                                                                .where((item) => item['subgroup'] == '2')
-                                                                .map((item) => _buildScheduleItem(item, TextAlign.end))
-                                                                .toList(),
-                                                          ),
-                                                        ),
-                                                    ],
-                                                  )
+                                                          children: [
+                                                            if (items.any((item) => item['subgroup'] == '1'))
+                                                              Expanded(
+                                                                flex: 1,
+                                                                child: Column(
+                                                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                                                  children: items
+                                                                      .where((item) => item['subgroup'] == '1')
+                                                                      .map((item) => _buildScheduleItem(item, TextAlign.start))
+                                                                      .toList(),
+                                                                ),
+                                                              ),
+                                                            if (items.any((item) => item['subgroup'] == '2'))
+                                                              Expanded(
+                                                                flex: 1,
+                                                                child: Column(
+                                                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                                                  children: items
+                                                                      .where((item) => item['subgroup'] == '2')
+                                                                      .map((item) => _buildScheduleItem(item, TextAlign.end))
+                                                                      .toList(),
+                                                                ),
+                                                              ),
+                                                          ],
+                                                        )
                                                       : Column(
-                                                    crossAxisAlignment: CrossAxisAlignment.center,
-                                                    children: items.map((item) => SizedBox(
-                                                      width: 900,
-                                                      child: _buildScheduleItem(item, TextAlign.center),
-                                                    )).toList(),
-                                                  ),
+                                                          crossAxisAlignment: CrossAxisAlignment.center,
+                                                          children: items.map((item) => SizedBox(
+                                                            width: 900,
+                                                            child: _buildScheduleItem(item, TextAlign.center),
+                                                          )).toList(),
+                                                        ),
                                                 ),
                                               ],
                                             ),
@@ -375,58 +455,161 @@ class _TimetableGroupState extends State<TimetableGroup> {
                           showDialog(
                             context: context,
                             builder: (BuildContext context) {
-                              return AlertDialog(
-                                title: const Text('Редактировать расписание'),
-                                content: SingleChildScrollView(
-                                  child: Column(
-                                    children: [
-                                      TextField(
-                                        controller: disciplineController,
-                                        decoration: const InputDecoration(
-                                          labelText: 'Дисциплина',
-                                        ),
+                              return StatefulBuilder(
+                                builder: (BuildContext context, StateSetter setState) {
+                                  return AlertDialog(
+                                    title: const Text('Редактировать расписание'),
+                                    content: SingleChildScrollView(
+                                      child: Column(
+                                        children: [
+                                          Autocomplete<String>(
+                                            optionsBuilder: (TextEditingValue textEditingValue) {
+                                              if (textEditingValue.text.isEmpty) {
+                                                return const Iterable<String>.empty();
+                                              }
+                                              return _disciplines.where((String discipline) {
+                                                return discipline.toLowerCase().contains(
+                                                  textEditingValue.text.toLowerCase(),
+                                                );
+                                              });
+                                            },
+                                            onSelected: (String value) {
+                                              setState(() {
+                                                disciplineController.text = value;
+                                              });
+                                            },
+                                            fieldViewBuilder: (BuildContext context, TextEditingController textEditingController, FocusNode focusNode, VoidCallback onFieldSubmitted) {
+                                              return TextFormField(
+                                                controller: textEditingController,
+                                                focusNode: focusNode,
+                                                decoration: InputDecoration(
+                                                  contentPadding: const EdgeInsets.symmetric(vertical: 8.0),
+                                                  labelText: disciplineController.text,
+                                                  hintText: 'Введите обновленные данные',
+                                                ),
+                                                onChanged: (String newValue) {
+                                                  setState(() {
+                                                    disciplineController.text = newValue;
+                                                  });
+                                                },
+                                                validator: (String? value) {
+                                                  if (value == null || value.isEmpty) {
+                                                    return 'Выберите или введите дисциплину';
+                                                  }
+                                                  return null;
+                                                },
+                                              );
+                                            },
+                                          ),
+                                          TextField(
+                                            controller: weekController,
+                                            decoration: const InputDecoration(
+                                              labelText: 'Неделя',
+                                            ),
+                                          ),
+                                          Autocomplete<String>(
+                                            optionsBuilder: (TextEditingValue textEditingValue) {
+                                              if (textEditingValue.text.isEmpty) {
+                                                return const Iterable<String>.empty();
+                                              }
+                                              return _classrooms.where((String classroom) {
+                                                return classroom.toLowerCase().contains(
+                                                  textEditingValue.text.toLowerCase(),
+                                                );
+                                              });
+                                            },
+                                            onSelected: (String value) {
+                                              setState(() {
+                                                classroomController.text = value;
+                                              });
+                                            },
+                                            fieldViewBuilder: (BuildContext context, TextEditingController textEditingController, FocusNode focusNode, VoidCallback onFieldSubmitted) {
+                                              return TextFormField(
+                                                controller: textEditingController,
+                                                focusNode: focusNode,
+                                                decoration: InputDecoration(
+                                                  contentPadding: const EdgeInsets.symmetric(vertical: 8.0),
+                                                  labelText: classroomController.text,
+                                                  hintText: 'Введите обновленные данные',
+                                                ),
+                                                onChanged: (String newValue) {
+                                                  setState(() {
+                                                    classroomController.text = newValue;
+                                                  });
+                                                },
+                                                validator: (String? value) {
+                                                  if (value == null || value.isEmpty) {
+                                                    return 'Выберите или введите аудиторию';
+                                                  }
+                                                  return null;
+                                                },
+                                              );
+                                            },
+                                          ),
+                                          Autocomplete<String>(
+                                            optionsBuilder: (TextEditingValue textEditingValue) {
+                                              if (textEditingValue.text.isEmpty) {
+                                                return const Iterable<String>.empty();
+                                              }
+                                              return _teachers.where((String teacher) {
+                                                return teacher.toLowerCase().contains(
+                                                  textEditingValue.text.toLowerCase(),
+                                                );
+                                              });
+                                            },
+                                            onSelected: (String value) {
+                                              setState(() {
+                                                teacherNameController.text = value;
+                                              });
+                                            },
+                                            fieldViewBuilder: (BuildContext context, TextEditingController textEditingController, FocusNode focusNode, VoidCallback onFieldSubmitted) {
+                                              return TextFormField(
+                                                controller: textEditingController,
+                                                focusNode: focusNode,
+                                                decoration: InputDecoration(
+                                                  contentPadding: EdgeInsets.symmetric(vertical: 0.0),
+                                                  labelText: teacherNameController.text,
+                                                  hintText: 'Введите обновленные данные' ,
+                                                ),
+                                                onChanged: (String newValue) {
+                                                  setState(() {
+                                                    teacherNameController.text = newValue;
+                                                  });
+                                                },
+                                                validator: (String? value) {
+                                                  if (value == null || value.isEmpty) {
+                                                    return 'Выберите или введите имя преподавателя';
+                                                  }
+                                                  return null;
+                                                },
+                                              );
+                                            },
+                                          ),
+                                        ],
                                       ),
-                                      TextField(
-                                        controller: weekController,
-                                        decoration: const InputDecoration(
-                                          labelText: 'Неделя',
-                                        ),
+                                    ),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () {
+                                          Navigator.of(context).pop();
+                                        },
+                                        child: const Text('Отмена'),
                                       ),
-                                      TextField(
-                                        controller: classroomController,
-                                        decoration: const InputDecoration(
-                                          labelText: 'Аудитория',
-                                        ),
-                                      ),
-                                      TextField(
-                                        controller: teacherNameController,
-                                        decoration: const InputDecoration(
-                                          labelText: 'Преподаватель',
-                                        ),
+                                      ElevatedButton(
+                                        onPressed: () async {
+                                          await updateScheduleItem(item['id'].toString(), {
+                                            'discipline': disciplineController.text,
+                                            'week': weekController.text,
+                                            'classroom': classroomController.text,
+                                            'teacher_name': teacherNameController.text,
+                                          });
+                                          Navigator.of(context).pop();
+                                        },
+                                        child: const Text('Сохранить'),
                                       ),
                                     ],
-                                  ),
-                                ),
-                                actions: [
-                                  TextButton(
-                                    onPressed: () {
-                                      Navigator.of(context).pop();
-                                    },
-                                    child: const Text('Отмена'),
-                                  ),
-                                  ElevatedButton(
-                                    onPressed: () async {
-                                      await updateScheduleItem(item['id'].toString(), {
-                                        'discipline': disciplineController.text,
-                                        'week': weekController.text,
-                                        'classroom': classroomController.text,
-                                        'teacher_name': teacherNameController.text,
-                                      });
-                                      Navigator.of(context).pop();
-                                    },
-                                    child: const Text('Сохранить'),
-                                  ),
-                                ],
+                                  );
+                                },
                               );
                             },
                           );
@@ -479,6 +662,7 @@ class _TimetableGroupState extends State<TimetableGroup> {
     ],
   );
 }
+
 
   double _calculateGroupWidth(String groupName) {
     final textWidth = TextPainter(
