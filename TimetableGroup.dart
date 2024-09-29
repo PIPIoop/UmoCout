@@ -174,6 +174,63 @@ Future<List<Map<String, dynamic>>> fetchGroupSchedule(String groupName) async {
     );
   }
 
+// Время проведения пар по номерам
+final Map<int, String> lessonTimes = {
+  1: '08:00 – 09:30',
+  2: '09:40 – 11:10',
+  3: '11:20 – 12:50',
+  4: '13:15 – 14:45',
+  5: '15:00 – 16:30',
+  6: '16:40 – 18:10',
+  7: '18:20 – 19:50',
+  8: '19:55 – 21:25',
+};
+
+// Получаем время проведения пары по её номеру
+String _getLessonTime(int? pairNumber) {
+  if (pairNumber != null && lessonTimes.containsKey(pairNumber)) {
+    return lessonTimes[pairNumber]!;
+  }
+  return 'Время не указано';
+}
+
+// Функция для парсинга времени (например, "08:00 – 09:30") в минуты с начала дня
+int _parseTime(String time) {
+  final regex = RegExp(r'[-–]');
+  final timeParts = time.split(regex);
+  final startTime = timeParts[0].trim();
+  final startTimeValues = startTime.split(':');
+  
+  if (startTimeValues.length != 2) {
+    throw FormatException('Некорректный формат времени: $time');
+  }
+
+  final hours = int.tryParse(startTimeValues[0]);
+  final minutes = int.tryParse(startTimeValues[1]);
+
+  if (hours == null || minutes == null) {
+    throw FormatException('Не удалось разобрать часы или минуты: $time');
+  }
+
+  return hours * 60 + minutes; // Возвращаем время в минутах с начала дня
+}
+
+// Функция сравнения времени пар
+int _compareLessonTimes(int pairA, int pairB) {
+  String timeA = _getLessonTime(pairA);
+  String timeB = _getLessonTime(pairB);
+
+  try {
+    final minutesA = _parseTime(timeA);
+    final minutesB = _parseTime(timeB);
+
+    return minutesA.compareTo(minutesB);
+  } catch (e) {
+    print('Ошибка парсинга времени: $e');
+    return 0;
+  }
+}
+
 Widget _buildGroupColumns() {
   final groupListViewScrollController = ScrollController();
 
@@ -199,6 +256,8 @@ Widget _buildGroupColumns() {
                   builder: (context, snapshot) {
                     if (snapshot.connectionState == ConnectionState.waiting) {
                       return const Center(child: CircularProgressIndicator());
+                    } else if (snapshot.hasError) {
+                      return Center(child: Text('Ошибка: ${snapshot.error}'));
                     } else {
                       final List<Map<String, dynamic>> schedule = snapshot.data ?? [];
 
@@ -251,8 +310,7 @@ Widget _buildGroupColumns() {
 
                                   // Сортировка пар по номеру
                                   final sortedPairs = groupedByPair.entries.toList()
-                                    ..sort((a, b) => int.parse(a.key.split(' ')[0])
-                                        .compareTo(int.parse(b.key.split(' ')[0])));
+                                    ..sort((a, b) => _compareLessonTimes(int.tryParse(a.key.split(' ')[0]) ?? 0, int.tryParse(b.key.split(' ')[0]) ?? 0));
 
                                   return Column(
                                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -279,23 +337,23 @@ Widget _buildGroupColumns() {
                                             child: Column(
                                               children: [
                                                 Text(
-                                                  '$pairName пара',
+                                                  '$pairName пара (${_getLessonTime(int.tryParse(pairName))})',
                                                   style: const TextStyle(fontSize: 25.0, fontWeight: FontWeight.bold),
                                                 ),
                                                 Container(
-                                                  padding: const EdgeInsets.all(12.0),  
-                                              decoration: BoxDecoration(
-                                                color: Colors.white,  
-                                                borderRadius: BorderRadius.circular(8.0),  
-                                                boxShadow: [
-                                                  BoxShadow(
-                                                    color: Colors.grey.withOpacity(0.5),
-                                                    spreadRadius: 3,
-                                                    blurRadius: 5,
-                                                    offset: Offset(0, 3),
+                                                  padding: const EdgeInsets.all(12.0),
+                                                  decoration: BoxDecoration(
+                                                    color: Colors.white,
+                                                    borderRadius: BorderRadius.circular(8.0),
+                                                    boxShadow: [
+                                                      BoxShadow(
+                                                        color: Colors.grey.withOpacity(0.5),
+                                                        spreadRadius: 3,
+                                                        blurRadius: 5,
+                                                        offset: Offset(0, 3),
+                                                      ),
+                                                    ],
                                                   ),
-                                                ],
-                                              ),
                                                   child: Column(
                                                     crossAxisAlignment: CrossAxisAlignment.center,
                                                     children: commonItems
@@ -311,23 +369,23 @@ Widget _buildGroupColumns() {
                                           return Padding(
                                             padding: const EdgeInsets.all(8.0),
                                             child: Container(
-                                              padding: const EdgeInsets.all(12.0),  // Внутренние отступы для контейнера
+                                              padding: const EdgeInsets.all(12.0),  
                                               decoration: BoxDecoration(
-                                                color: Colors.white,  // Цвет фона контейнера
-                                                borderRadius: BorderRadius.circular(8.0),  // Скругление углов контейнера
+                                                color: Colors.white,  
+                                                borderRadius: BorderRadius.circular(8.0),  
                                                 boxShadow: [
                                                   BoxShadow(
                                                     color: Colors.grey.withOpacity(0.5),
                                                     spreadRadius: 3,
                                                     blurRadius: 5,
-                                                    offset: Offset(0, 3),  // Смещение тени
+                                                    offset: Offset(0, 3), 
                                                   ),
                                                 ],
                                               ),
                                               child: Column(
                                                 children: [
                                                   Text(
-                                                    '$pairName пара',
+                                                    '$pairName пара (${_getLessonTime(int.tryParse(pairName))})',
                                                     style: const TextStyle(fontSize: 25.0, fontWeight: FontWeight.bold),
                                                   ),
                                                   Row(
@@ -351,44 +409,40 @@ Widget _buildGroupColumns() {
                                                                 child: Column(
                                                                   crossAxisAlignment: CrossAxisAlignment.end,
                                                                   children: subgroup2Items
-                                                                      .map((item) => _buildScheduleItem(item, TextAlign.end))
-                                                                      .toList(),
-                                                                ),
-                                                              ),
-                                                          ],
-                                                        ),
-                                                      ),
-                                                    ],
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                          );
-                                        }
-
-                                        return SizedBox(); // Если нет пар, пустое отображение
-                                      }),
-                                    ],
-                                  );
-                                }),
-                              ],
-                            ),
-                          ),
+                                                                      .map((item)=> _buildScheduleItem(item, TextAlign.end))
+                                                                       .toList(),
+                                                                        ),
+                                                                       ),
+                                                                     ],
+                                                                   ),
+                                                                 ),
+                                                               ],
+                                                             ),
+                                                           ],
+                                                         ),
+                                                       ),
+                                                     );
+                                                   }
+                                    return SizedBox(); 
+                                  }),
+                                ],
+                              );
+                            }),
+                          ],
                         ),
-                      );
-                    }
-                  },
-                );
+                      ),
+                    ),
+                  );
+                }
               },
-            ),
-          ],
+            );
+          },
         ),
       ],
     ),
-  );
-}
-
-
+  ],
+),
+); }
 
 
 
