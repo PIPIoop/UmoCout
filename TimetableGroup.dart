@@ -176,31 +176,36 @@ Future<List<Map<String, dynamic>>> fetchGroupSchedule(String groupName) async {
 
 // Время проведения пар по номерам
 final Map<int, String> lessonTimes = {
-  1: '08:00 – 09:30',
-  2: '09:40 – 11:10',
-  3: '11:20 – 12:50',
-  4: '13:15 – 14:45',
-  5: '15:00 – 16:30',
-  6: '16:40 – 18:10',
-  7: '18:20 – 19:50',
-  8: '19:55 – 21:25',
+  1: '08:00 - 09:30',
+  2: '09:40 - 11:10',
+  3: '11:20 - 12:50',
+  4: '13:15 - 14:45',
+  5: '15:00 - 16:30',
+  6: '16:40 - 18:10',
+  7: '18:20 - 19:50',
+  8: '19:55 - 21:25',
 };
 
 // Получаем время проведения пары по её номеру
 String _getLessonTime(int? pairNumber) {
   if (pairNumber != null && lessonTimes.containsKey(pairNumber)) {
-    return lessonTimes[pairNumber]!;
+    return lessonTimes[pairNumber]!; // Возвращает время в формате "чч:мм - чч:мм"
   }
-  return 'Время не указано';
+  return '';
 }
 
-// Функция для парсинга времени (например, "08:00 – 09:30") в минуты с начала дня
+// Функция для парсинга времени (например, "18:00 - 19:01") в минуты с начала дня
 int _parseTime(String time) {
-  final regex = RegExp(r'[-–]');
+  final regex = RegExp(r'-');
   final timeParts = time.split(regex);
-  final startTime = timeParts[0].trim();
+
+  if (timeParts.length != 2) {
+    throw FormatException('Некорректный формат времени: $time');
+  }
+
+  final startTime = timeParts[0].trim(); // Время начала
   final startTimeValues = startTime.split(':');
-  
+
   if (startTimeValues.length != 2) {
     throw FormatException('Некорректный формат времени: $time');
   }
@@ -216,10 +221,7 @@ int _parseTime(String time) {
 }
 
 // Функция сравнения времени пар
-int _compareLessonTimes(int pairA, int pairB) {
-  String timeA = _getLessonTime(pairA);
-  String timeB = _getLessonTime(pairB);
-
+int _compareLessonTimes(String timeA, String timeB) {
   try {
     final minutesA = _parseTime(timeA);
     final minutesB = _parseTime(timeB);
@@ -229,6 +231,11 @@ int _compareLessonTimes(int pairA, int pairB) {
     print('Ошибка парсинга времени: $e');
     return 0;
   }
+}
+
+// Функция для удаления всех пробелов из строки
+String _removeSpaces(String input) {
+  return input.replaceAll(' ', ''); // Убираем все пробелы
 }
 
 Widget _buildGroupColumns() {
@@ -300,7 +307,7 @@ Widget _buildGroupColumns() {
                                   for (var item in dayItems) {
                                     String pairName = item['pair_name'] ?? 'Не указано';
                                     String week = item['week'] ?? 'все недели';
-                                    String key = '$pairName - неделя $week';
+                                    String key = '${_removeSpaces(pairName)} - неделя $week'; // Убираем пробелы
                                     if (groupedByPair.containsKey(key)) {
                                       groupedByPair[key]!.add(item);
                                     } else {
@@ -308,9 +315,9 @@ Widget _buildGroupColumns() {
                                     }
                                   }
 
-                                  // Сортировка пар по номеру
+                                  // Сортировка пар по времени
                                   final sortedPairs = groupedByPair.entries.toList()
-                                    ..sort((a, b) => _compareLessonTimes(int.tryParse(a.key.split(' ')[0]) ?? 0, int.tryParse(b.key.split(' ')[0]) ?? 0));
+                                    ..sort((a, b) => _compareLessonTimes(a.key.split(' ')[0], b.key.split(' ')[0]));
 
                                   return Column(
                                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -331,13 +338,18 @@ Widget _buildGroupColumns() {
                                         // Проверка на наличие общих и отдельных пар
                                         bool hasCommonPair = commonItems.isNotEmpty;
                                         bool hasDifferentSubgroupPairs = subgroup1Items.isNotEmpty || subgroup2Items.isNotEmpty;
+                                        
                                         if (hasCommonPair) {
                                           return Padding(
                                             padding: const EdgeInsets.all(8.0),
                                             child: Column(
                                               children: [
+                                                // Полное время пары
                                                 Text(
-                                                  '$pairName пара (${_getLessonTime(int.tryParse(pairName))})',
+                                                  // Проверяем, является ли pairName числом
+                                                  _isNumeric(pairName)
+                                                      ? '${_removeSpaces(pairName)} пара (${_getLessonTime(int.tryParse(pairName))})' // Убираем пробелы
+                                                      : '${_removeSpaces(pairName)} пара ${_getLessonTime(int.tryParse(pairName))}', // Без скобок
                                                   style: const TextStyle(fontSize: 25.0, fontWeight: FontWeight.bold),
                                                 ),
                                                 Container(
@@ -365,27 +377,32 @@ Widget _buildGroupColumns() {
                                             ),
                                           );
                                         }
+                                        
                                         if (hasDifferentSubgroupPairs) {
                                           return Padding(
                                             padding: const EdgeInsets.all(8.0),
                                             child: Container(
-                                              padding: const EdgeInsets.all(12.0),  
+                                              padding: const EdgeInsets.all(12.0),
                                               decoration: BoxDecoration(
-                                                color: Colors.white,  
-                                                borderRadius: BorderRadius.circular(8.0),  
+                                                color: Colors.white,
+                                                borderRadius: BorderRadius.circular(8.0),
                                                 boxShadow: [
                                                   BoxShadow(
                                                     color: Colors.grey.withOpacity(0.5),
                                                     spreadRadius: 3,
                                                     blurRadius: 5,
-                                                    offset: Offset(0, 3), 
+                                                    offset: Offset(0, 3),
                                                   ),
                                                 ],
                                               ),
                                               child: Column(
                                                 children: [
+                                                  // Полное время пары
                                                   Text(
-                                                    '$pairName пара (${_getLessonTime(int.tryParse(pairName))})',
+                                                    // Проверяем, является ли pairName числом
+                                                    _isNumeric(pairName)
+                                                        ? '${_removeSpaces(pairName)} пара (${_getLessonTime(int.tryParse(pairName))})' // Убираем пробелы
+                                                        : '${_removeSpaces(pairName)} пара ${_getLessonTime(int.tryParse(pairName))}', // Без скобок
                                                     style: const TextStyle(fontSize: 25.0, fontWeight: FontWeight.bold),
                                                   ),
                                                   Row(
@@ -409,40 +426,48 @@ Widget _buildGroupColumns() {
                                                                 child: Column(
                                                                   crossAxisAlignment: CrossAxisAlignment.end,
                                                                   children: subgroup2Items
-                                                                      .map((item)=> _buildScheduleItem(item, TextAlign.end))
-                                                                       .toList(),
-                                                                        ),
-                                                                       ),
-                                                                     ],
-                                                                   ),
-                                                                 ),
-                                                               ],
-                                                             ),
-                                                           ],
-                                                         ),
-                                                       ),
-                                                     );
-                                                   }
-                                    return SizedBox(); 
-                                  }),
-                                ],
-                              );
-                            }),
-                          ],
+                                                                      .map((item) => _buildScheduleItem(item, TextAlign.end))
+                                                                      .toList(),
+                                                                ),
+                                                              ),
+                                                          ],
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          );
+                                        }
+                                        return SizedBox(); // Если ничего не нужно показывать, возвращаем пустую контейнеру
+                                      }).toList(),
+                                      const Divider(height: 40.0),
+                                    ],
+                                  );
+                                }).toList(),
+                              ],
+                            ),
+                          ),
                         ),
-                      ),
-                    ),
-                  );
-                }
+                      );
+                    }
+                  },
+                );
               },
-            );
-          },
+            ),
+          ],
         ),
       ],
     ),
-  ],
-),
-); }
+  );
+}
+
+// Функция для проверки, является ли строка числом
+bool _isNumeric(String str) {
+  if (str.isEmpty) return false;
+  return double.tryParse(str) != null; // Проверяем, можно ли преобразовать строку в число
+}
 
 
 
